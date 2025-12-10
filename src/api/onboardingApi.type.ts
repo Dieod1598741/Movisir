@@ -42,7 +42,10 @@ export interface OnboardingCompleteRequest {
     preferenceVector: number[];
 }
 
+import type { User } from './authApi.type';
+
 export interface OnboardingCompleteResponse {
     onboarding_completed: boolean;
     message: string;
+    user: User;
 }

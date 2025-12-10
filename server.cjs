@@ -94,19 +94,23 @@ server.get("/movies/onboarding", (req, res) => {
 server.post("/onboarding/complete", (req, res) => {
     const { userId, ott, likedGenres, dislikedGenres, preferenceVector } = req.body;
 
-    // 사용자 찾기
-    const user = router.db.get("users").find({ id: userId }).value();
+    // 사용자 찾기 (Type coercion allowed for robust matching)
+    // db.json might have number or string IDs.
+    const user = router.db.get("users")
+        .find(u => u.id == userId)
+        .value();
 
     if (!user) {
-        // Test mode: if no user found, maybe just create a generic success or error. 
-        // For strictness, let's error, but usually we should have a user.
-        // However, if using mock auth, userId might be from Date.now() and matches.
+        console.error(`[Server] User not found for ID: ${userId} (Type: ${typeof userId})`);
         return res.status(404).json({ message: "User not found" });
     }
 
+    console.log(`[Server] Saving onboarding for user: ${user.id}`);
+
     // 사용자 정보 업데이트
-    router.db.get("users")
-        .find({ id: userId })
+    // We need to use the exact ID from the found user object to update correctly
+    const updatedUser = router.db.get("users")
+        .find({ id: user.id })
         .assign({
             ott,
             likedGenres,
@@ -118,7 +122,8 @@ server.post("/onboarding/complete", (req, res) => {
 
     res.json({
         onboarding_completed: true,
-        message: "Onboarding data saved successfully"
+        message: "Onboarding data saved successfully",
+        user: updatedUser
     });
 });
 

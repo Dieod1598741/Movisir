@@ -75,6 +75,15 @@ export const getRecommendations = async (userId: number): Promise<MovieRecommend
             .sort((a, b) => (b.popularity || 0) - (a.popularity || 0))
             .slice(0, 3);
 
+        // [변경 필요] 백엔드 이관 강력 권장
+        // 현재는 프론트엔드에서 모든 영화와 시청 기록을 가져와서 필터링하고 있습니다.
+        // 실제 운영 환경에서는 데이터 양이 많아지면 성능 문제가 발생합니다.
+        // 백엔드에서 추천 결과를 계산해서 반환하는 API(예: GET /movies/recommendations)를 만들어 호출하세요.
+        // 
+        // 예시 코드:
+        // const response = await axiosInstance.get("/movies/recommendations");
+        // return response.data;
+
         return {
             algorithmic: algorithmicRecommendations,
             popular: popularRecommendations
@@ -179,6 +188,8 @@ export const getUserStats = async (userId: number): Promise<UserStats> => {
         const favoriteGenre = Object.entries(watchedByGenre)
             .sort(([, a], [, b]) => b - a)[0]?.[0] || "없음";
 
+        // [변경 필요] 백엔드 이관 권장
+        // 통계 계산 로직도 백엔드로 옮기는 것이 좋습니다. (GET /users/stats)
         return {
             totalWatched,
             averageRating: Math.round(averageRating * 10) / 10,

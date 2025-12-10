@@ -18,13 +18,15 @@ export default function OnboardingCompletePage() {
         setError("");
 
         try {
-            const user = getCurrentUser();
+            // [현재 상태] authApi.ts에서 getCurrentUser가 비동기(async)로 변경되었으므로 await 필수
+            const user = await getCurrentUser();
 
             if (!user) {
                 throw new Error("사용자 정보를 찾을 수 없습니다");
             }
 
-            await submitOnboarding({
+            // 1) 백엔드에 온보딩 데이터 전송 (db.json 업데이트)
+            const response = await submitOnboarding({
                 userId: user.id,
                 ott: ottList,
                 likedGenres,
@@ -32,12 +34,33 @@ export default function OnboardingCompletePage() {
                 preferenceVector,
             });
 
-            // 온보딩 스토어 초기화
+            // -----------------------------------------------------------
+            // [백엔드 연동 가이드]
+            // 실제 운영 서버에서는 응답으로 최신 유저 정보를 받아와서
+            // 로컬 스토리지의 유저 정보를 갱신해야 합니다.
+            // 아래 코드는 현재 Mock Server(server.cjs) 기준입니다.
+            // -----------------------------------------------------------
+
+            // 2) 최신 유저 정보 확인 (Mock 서버에서 user 객체를 반환하도록 수정됨)
+            const updatedUser = response.user; // server.cjs 수정으로 user 필드 추가됨
+
+            if (updatedUser) {
+                // 3) 프론트 로컬 스토리지 업데이트
+                // (실제 백엔드: 응답받은 최신 유저 정보로 덮어쓰기)
+                localStorage.setItem("user", JSON.stringify(updatedUser));
+
+                // 필요하다면 userId도 갱신 (보통은 변하지 않음)
+                // localStorage.setItem("userId", updatedUser.id); 
+            }
+
+            // 4) 온보딩 스토어 초기화
             reset();
 
-            // 메인 페이지로 이동
-            navigate("/main");
+            // 5) 메인 페이지로 이동
+            navigate("/"); // '/main' 대신 '/' 루트 경로 사용 권장 (라우터 설정에 따라 다름)
+
         } catch (err: any) {
+            console.error(err);
             setError(err.message || "온보딩 완료 중 오류가 발생했습니다");
         } finally {
             setIsSubmitting(false);

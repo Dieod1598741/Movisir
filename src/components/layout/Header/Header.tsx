@@ -84,7 +84,7 @@ export default function Header({ isDark, handleDarkToggle, resetChatbot }: Heade
           /* font-medium: 중간 굵기 */
           /* hover:scale-105: 마우스 올리면 확대 */
           /* text-blue-400: 파란색 텍스트 */
-          className="text-l sm:text-sm font-medium hover:scale-105 text-blue-400 transition-transform"
+          className="text-l sm:text-l font-medium hover:scale-105 text-blue-400 transition-transform"
         >
           도움말
         </button>

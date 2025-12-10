@@ -83,12 +83,33 @@ export const logout = async (): Promise<void> => {
 // ------------------------------
 // 👤 현재 로그인된 사용자 가져오기
 // ------------------------------
-export const getCurrentUser = (): User | null => {
-    const userStr = localStorage.getItem("user");
-    if (!userStr) return null;
-
+export const getCurrentUser = async () => {
     try {
-        return JSON.parse(userStr);
+        // 1. 저장된 user 객체 확인 (우선순위 높음)
+        const userStr = localStorage.getItem("user");
+        if (userStr) {
+            const user = JSON.parse(userStr);
+            if (user && user.id) {
+                // Mock 서버인 경우 항상 최신 정보를 가져오기 위해 API 호출 시도
+                // (실제 앱에서는 로컬 정보만 써도 되지만, 여기서는 DB 동기화 확인용)
+                try {
+                    // [변경 필요] 실제 백엔드 API 경로로 변경하세요 (예: /users/me 또는 /auth/me)
+                    // 현재는 json-server 구조(users/{id})에 맞춰져 있습니다.
+                    const res = await axiosInstance.get(`http://localhost:3001/users/${user.id}`);
+                    return res.data;
+                } catch (e) {
+                    // API 호출 실패 시 로컬 정보라도 반환
+                    return user;
+                }
+            }
+        }
+
+        // 2. 과거 방식 호환 (userId만 저장된 경우)
+        const userId = localStorage.getItem("userId");
+        if (!userId) return null;
+
+        const res = await axiosInstance.get(`http://localhost:3001/users/${userId}`);
+        return res.data;
     } catch {
         return null;
     }
@@ -111,26 +132,25 @@ export const deleteUser = async (userId: number): Promise<void> => {
 // ------------------------------
 export const sendVerificationCode = async (email: string): Promise<{ message: string; expiresIn: number }> => {
     try {
-        // TODO: 백엔드 연결 시 실제 API 호출
+        // [변경 필요] 백엔드 연결 시 아래 주석을 해제하고 Mock 코드를 삭제하세요.
         // const response = await axiosInstance.post("/auth/signup/send-code", { email });
-
-        // 프론트엔드 전용 Mock 응답
-        console.log(`[Mock] Sending verification code to: ${email}`);
-
-        // 실제 백엔드 연결 시 아래 주석 해제하고 위 Mock 코드 제거
         // return {
         //     message: response.data.message,
         //     expiresIn: response.data.expiresIn,
         // };
 
+        // ----------------------------------------------------------------
+        // [삭제 예정] 프론트엔드 전용 Mock 응답 (실제 백엔드 연결 시 삭제)
+        console.log(`[Mock] Sending verification code to: ${email}`);
         return new Promise((resolve) => {
             setTimeout(() => {
                 resolve({
                     message: "인증 코드가 이메일로 전송되었습니다",
                     expiresIn: 300, // 5분
                 });
-            }, 1000); // 1초 딜레이로 실제 API 호출 시뮬레이션
+            }, 1000);
         });
+        // ----------------------------------------------------------------
     } catch (error: any) {
         const msg = error?.response?.data?.message || "인증 코드 전송 중 오류가 발생했습니다";
         throw new Error(msg);
@@ -142,18 +162,16 @@ export const sendVerificationCode = async (email: string): Promise<{ message: st
 // ------------------------------
 export const verifyCode = async (email: string, code: string): Promise<{ valid: boolean; message: string }> => {
     try {
-        // TODO: 백엔드 연결 시 실제 API 호출
+        // [변경 필요] 백엔드 연결 시 아래 주석을 해제하고 Mock 코드를 삭제하세요.
         // const response = await axiosInstance.post("/auth/signup/verify-code", { email, code });
-
-        // 프론트엔드 전용 Mock 응답 (모든 코드를 유효하다고 처리)
-        console.log(`[Mock] Verifying code for: ${email}, code: ${code}`);
-
-        // 실제 백엔드 연결 시 아래 주석 해제하고 위 Mock 코드 제거
         // return {
         //     valid: response.data.valid,
         //     message: response.data.message,
         // };
 
+        // ----------------------------------------------------------------
+        // [삭제 예정] 프론트엔드 전용 Mock 응답 (실제 백엔드 연결 시 삭제)
+        console.log(`[Mock] Verifying code for: ${email}, code: ${code}`);
         return new Promise((resolve) => {
             setTimeout(() => {
                 // Mock: 6자리 숫자 코드면 유효하다고 처리
@@ -164,6 +182,7 @@ export const verifyCode = async (email: string, code: string): Promise<{ valid: 
                 });
             }, 800);
         });
+        // ----------------------------------------------------------------
     } catch (error: any) {
         const msg = error?.response?.data?.message || "인증 코드 확인 중 오류가 발생했습니다";
         throw new Error(msg);

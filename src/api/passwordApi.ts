@@ -7,11 +7,16 @@ import type { PasswordReset } from "./passwordApi.type";
 // 비밀번호 재설정 요청
 export const requestPasswordReset = async (email: string): Promise<{ success: boolean; message: string }> => {
     try {
-        // [변경 필요 - 백엔드 이관]
+        // [변경 필요 - 백엔드 이관 필수]
         // 비밀번호 재설정 요청은 클라이언트에서 사용자 조회 -> 토큰 생성 과정을 거치지 않고,
         // 이메일만 서버로 전송하면 서버가 내부적으로 처리해야 보안상 안전합니다.
-        // 예: await axiosInstance.post("/auth/forgot-password", { email });
+        // 클라이언트에서 사용자를 조회하는 로직은 보안 위험이 있습니다.
+        // 
+        // 권장 구현:
+        // const response = await axiosInstance.post("/auth/forgot-password", { email });
+        // return response.data;
 
+        // --- 아래 코드는 백엔드 이관 시 삭제하세요 ---
         // 사용자 존재 여부 확인
         const usersResponse = await axiosInstance.get(`/users?email=${email}`);
         const users = usersResponse.data;
@@ -57,6 +62,15 @@ export const resetPassword = async (
     newPassword: string
 ): Promise<{ success: boolean; message: string }> => {
     try {
+        // [변경 필요 - 백엔드 이관 필수]
+        // 토큰 검증 및 비밀번호 변경 로직은 반드시 서버에서 원자적으로 처리되어야 합니다.
+        // 클라이언트가 토큰을 조회하거나 직접 사용자를 패치(patch)하는 것은 매우 위험합니다.
+        //
+        // 권장 구현:
+        // const response = await axiosInstance.post("/auth/reset-password", { token, newPassword });
+        // return response.data;
+
+        // --- 아래 코드는 백엔드 이관 시 삭제하세요 ---
         // 토큰 조회
         const resetResponse = await axiosInstance.get(`/passwordResets?token=${token}&used=false`);
         const resets = resetResponse.data;

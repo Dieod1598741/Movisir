@@ -2,8 +2,8 @@ import axios from "axios";
 
 const API_BASE_URL =
     process.env.NODE_ENV === "development"
-        ? "http://localhost:3001"  // [변경 필요] 실제 개발 API 서버 주소로 변경하세요 (예: http://api.myapp.com)
-        : "https://real-backend.com"; // [변경 필요] 배포 시 사용할 프로덕션 API 주소
+        ? "http://10.0.1.117"  // [변경 필요] 백엔드 도메인 서버로 변경필요
+        : "https://api.movisr.com"; // [변경 필요] 실제 배포된 백엔드 서버 주소
 
 const axiosInstance = axios.create({
     baseURL: API_BASE_URL,
@@ -117,6 +117,25 @@ axiosInstance.interceptors.response.use(
             } finally {
                 isRefreshing = false;
             }
+        }
+
+        // [New] Error Page Redirection
+        const status = error.response?.status;
+        const currentPath = window.location.pathname;
+
+        if (status === 400 && currentPath !== "/error/400") {
+            window.location.href = "/error/400";
+            return Promise.reject(error);
+        }
+
+        if (status === 423 && currentPath !== "/error/423") {
+            window.location.href = "/error/423";
+            return Promise.reject(error);
+        }
+
+        if (status === 500 && currentPath !== "/error/500") {
+            window.location.href = "/error/500";
+            return Promise.reject(error);
         }
 
         return Promise.reject(error);

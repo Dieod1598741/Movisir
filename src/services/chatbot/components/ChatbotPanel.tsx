@@ -17,7 +17,7 @@ export default function ChatbotPanel({ isOpen, onClose }: ChatbotPanelProps) {
         {
           id: '1',
           type: 'bot',
-          content: 'For movie recommendations, please select the filters below!'
+          content: '영화 추천을 받으시려면 아래 필터를 선택하세요!'
         },
         {
           id: '2',
@@ -40,7 +40,7 @@ export default function ChatbotPanel({ isOpen, onClose }: ChatbotPanelProps) {
       {
         id: Date.now().toString(),
         type: 'bot',
-        content: 'Here are your recommendations!'
+        content: '추천 결과는 다음과 같습니다!'
       },
       {
         id: (Date.now() + 1).toString(),
