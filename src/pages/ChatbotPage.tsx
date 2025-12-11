@@ -15,6 +15,7 @@ import FilterChatBlock from '../services/chatbot/FilterBlock/FilterChatBlock';
 import MovieDetailModal from '../services/chatbot/MovieDetailModal/MovieDetailModal';
 import MovieCard from '../services/chatbot/components/MovieCard';
 import { useMovieStore } from '../store/useMovieStore';
+import { useAuth } from '../app/providers/AuthContext';
 
 // [타입] 대화 단계
 // - greeting: 인사 및 시작
@@ -59,8 +60,18 @@ export default function ChatbotPage() {
     // [상태] 선택된 장르들 (임시 저장)
     const [selectedGenres, setSelectedGenres] = useState<string[]>([]);
 
+    // [Auth] 사용자 인증 정보
+    const { user } = useAuth();
+
     // [Zustand] 영화 스토어
-    const { loadRecommended, loadPopular, setTime, toggleGenre } = useMovieStore();
+    const { loadRecommended, setTime, toggleGenre, setUserId } = useMovieStore();
+
+    // [Effect] userId 설정
+    useEffect(() => {
+        if (user?.id) {
+            setUserId(user.id);
+        }
+    }, [user, setUserId]);
 
     // [Effect] 초기 인사 메시지
     useEffect(() => {
@@ -204,9 +215,8 @@ export default function ChatbotPage() {
                             if (englishGenre) toggleGenre(englishGenre);
                         });
 
-                        // 영화 로드
+                        // 영화 로드 (백엔드가 algorithmic + popular 함께 제공)
                         loadRecommended();
-                        loadPopular();
 
                         // 결과 표시
                         setTimeout(() => {
@@ -233,7 +243,6 @@ export default function ChatbotPage() {
                     showBotResponse(
                         <FilterChatBlock onApply={() => {
                             loadRecommended();
-                            loadPopular();
                             showBotResponse(<ResultMovies />, ['다시 추천받기']);
                         }} />
                     );
@@ -254,7 +263,8 @@ export default function ChatbotPage() {
             if (reply === '영화 추천받기') {
                 handleBotResponse('greeting');
             } else if (reply === '인기 영화 보기') {
-                loadPopular();
+                // 인기 영화만 보기 - 현재는 백엔드에서 분리하지 않으므로 일반 추천을 호출
+                loadRecommended();
                 showBotResponse(
                     <PopularMoviesOnly />,
                     ['영화 추천받기']
@@ -378,7 +388,7 @@ export default function ChatbotPage() {
 
 // [컴포넌트] 추천 + 인기 영화 결과
 function ResultMovies() {
-    const { recommendedMovies, popularMovies, setDetailMovie } = useMovieStore();
+    const { recommendedMovies, popularMovies, setDetailMovie, removeRecommendedMovie } = useMovieStore();
 
     return (
         <div className="w-full">
@@ -386,7 +396,13 @@ function ResultMovies() {
             <div className="grid grid-cols-3 gap-2 mb-4">
                 {recommendedMovies.length > 0 ? (
                     recommendedMovies.map(movie => (
-                        <MovieCard key={movie.id} movie={movie} onClick={() => setDetailMovie(movie)} />
+                        <MovieCard
+                            key={movie.id}
+                            movie={movie}
+                            onClick={() => setDetailMovie(movie)}
+                            onReRecommend={() => removeRecommendedMovie(movie.id)}
+                            showReRecommend={true}
+                        />
                     ))
                 ) : (
                     <p className="text-xs text-gray-400 col-span-3">조건에 맞는 영화를 찾지 못했어요 😢</p>
@@ -397,7 +413,12 @@ function ResultMovies() {
             <div className="grid grid-cols-3 gap-2">
                 {popularMovies.length > 0 ? (
                     popularMovies.map(movie => (
-                        <MovieCard key={movie.id} movie={movie} onClick={() => setDetailMovie(movie)} />
+                        <MovieCard
+                            key={movie.id}
+                            movie={movie}
+                            onClick={() => setDetailMovie(movie)}
+                            showReRecommend={false}
+                        />
                     ))
                 ) : (
                     <p className="text-xs text-gray-400 col-span-3">인기 영화가 없습니다.</p>

@@ -26,16 +26,81 @@
 //    - group-hover:translate-x-1: 화살표 오른쪽 이동
 // ============================================================
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Chatbot from '../services/chatbot/components/Chatbot';
 import FloatingBubble from "../components/ui/FloatingBubble";
 import { useAuth } from '../app/providers/AuthContext';
 import LoginModal from '../services/auth/components/LoginModal/LoginModal';
+import OnboardingReminderModal from '../components/modals/OnboardingReminderModal';
+import { useMovieStore } from '../store/useMovieStore';
 
 export default function MainPage() {
-    const { isAuthenticated } = useAuth();
+    const { isAuthenticated, user } = useAuth();
+    const { setUserId } = useMovieStore();
     const [isChatbotOpen, setIsChatbotOpen] = useState(false);
     const [showLoginModal, setShowLoginModal] = useState(false);
+    const [showOnboardingReminder, setShowOnboardingReminder] = useState(false);
+
+    // 로그인 상태 변경 시 useMovieStore의 userId 설정
+    useEffect(() => {
+        if (user?.id) {
+            console.log('✅ useMovieStore에 userId 설정:', user.id);
+            setUserId(user.id);
+        } else {
+            console.log('❌ 로그아웃 상태 - userId를 null로 설정');
+            setUserId(null);
+        }
+    }, [user, setUserId]);
+
+    // 온보딩 리마인더 체크 (DB: completed_at, localStorage: 24시간 체크)
+    useEffect(() => {
+        console.log('=== 온보딩 리마인더 모달 체크 ===');
+        console.log('isAuthenticated:', isAuthenticated);
+        console.log('user:', user);
+
+        if (!isAuthenticated || !user) {
+            console.log('❌ 로그인하지 않음');
+            return;
+        }
+
+        // ✅ Step 1: 온보딩 완료 여부 확인 (DB에서)
+        const isCompleted = !!user.profile?.onboarding_completed_at;
+        console.log('  - onboarding_completed_at (DB):', user.profile?.onboarding_completed_at);
+        console.log('  - 완료 여부:', isCompleted);
+
+        if (isCompleted) {
+            console.log('✅ 온보딩 완료 - 리마인더 표시 안 함');
+            return;
+        }
+
+        // ✅ Step 2: 24시간 체크 (localStorage에서)
+        const lastShownKey = `onboarding_reminder_last_shown_user_${user.id}`;
+        const lastShownStr = localStorage.getItem(lastShownKey);
+        const now = Date.now();
+        const oneDay = 24 * 60 * 60 * 1000; // 24시간 (밀리초)
+
+        if (lastShownStr) {
+            const lastShown = parseInt(lastShownStr);
+            const timeSinceLastShown = now - lastShown;
+            const hoursRemaining = Math.ceil((oneDay - timeSinceLastShown) / (60 * 60 * 1000));
+
+            console.log('  - 마지막 표시 시간 (localStorage):', new Date(lastShown).toLocaleString());
+            console.log('  - 경과 시간:', Math.floor(timeSinceLastShown / (60 * 60 * 1000)), '시간');
+
+            if (timeSinceLastShown < oneDay) {
+                console.log(`❌ 24시간 이내 (${hoursRemaining}시간 후 다시 표시)`);
+                return;
+            }
+        }
+
+        // ✅ Step 3: 모달 표시
+        console.log('🎉 모달 표시! (온보딩 미완료 + 24시간 경과)');
+        setShowOnboardingReminder(true);
+
+        // localStorage에 현재 시간 저장
+        localStorage.setItem(lastShownKey, now.toString());
+        console.log('  - localStorage 업데이트:', new Date(now).toLocaleString());
+    }, [isAuthenticated, user]);
 
 
     // 챗봇 열기 핸들러 (로그인 체크)
@@ -49,6 +114,17 @@ export default function MainPage() {
         }
     };
 
+    const handleCloseOnboardingReminder = () => {
+        setShowOnboardingReminder(false);
+    };
+
+    const handlePermanentDismissOnboardingReminder = () => {
+        // 온보딩을 완료하면 자동으로 리마인더가 표시되지 않음
+        // 여기서는 단순히 모달만 닫음
+        setShowOnboardingReminder(false);
+        console.log('ℹ️ 온보딩을 완료하시면 리마인더가 표시되지 않습니다');
+    };
+
     return (
         <div className="max-w-screen-xl mx-auto px-4 py-6">
             <div className='max-w-screen-2xl mx-auto relative'>
@@ -58,7 +134,10 @@ export default function MainPage() {
                     float
                     onClick={handleOpenChatbot}
                 >
-                    당신에게 꼭 맞는 영화를 추천드리겠습니다.
+                    {isAuthenticated
+                        ? "당신에게 꼭 맞는 영화를 추천드리겠습니다."
+                        : "로그인 이후 서비스 이용이 가능합니다."
+                    }
                 </FloatingBubble>
                 <Chatbot
                     isOpen={isChatbotOpen}
@@ -75,6 +154,13 @@ export default function MainPage() {
                     setShowLoginModal(false);
                     // 필요시 회원가입 모달 열기
                 }}
+            />
+
+            {/* 온보딩 리마인더 모달 */}
+            <OnboardingReminderModal
+                visible={showOnboardingReminder}
+                onClose={handleCloseOnboardingReminder}
+                onPermanentDismiss={handlePermanentDismissOnboardingReminder}
             />
         </div>
     );

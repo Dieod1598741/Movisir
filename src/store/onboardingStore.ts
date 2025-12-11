@@ -2,14 +2,15 @@ import { create } from 'zustand';
 
 interface OnboardingState {
     ottList: string[];
-    likedGenres: string[];
-    dislikedGenres: string[];
+    likedGenres: string[];  // 좋아하는 장르만 저장 (nope는 단순히 제외)
     preferenceVector: number[];
+    skipped: boolean;
 
     // Actions
     toggleOTT: (platform: string) => void;
     addSwipe: (genre: string, liked: boolean) => void;
     computeVector: () => void;
+    setSkipped: (value: boolean) => void;
     reset: () => void;
 }
 
@@ -29,29 +30,33 @@ const GENRE_INDEX_MAP: Record<string, number> = {
 
 export const useOnboardingStore = create<OnboardingState>((set, get) => ({
     likedGenres: [],
-    dislikedGenres: [],
     preferenceVector: new Array(10).fill(0),
     ottList: [],
+    skipped: false,
 
     addSwipe: (genre, liked) => {
         set((state) => {
-            const newLiked = liked
-                ? [...state.likedGenres, genre]
-                : state.likedGenres;
-            const newDisliked = !liked
-                ? [...state.dislikedGenres, genre]
-                : state.dislikedGenres;
+            // liked=true인 경우에만 likedGenres에 추가
+            // liked=false(nope)인 경우는 단순히 제외 (아무 것도 하지 않음)
+            let newLiked = state.likedGenres;
 
-            // Update vector immediately
+            if (liked) {
+                // 중복 확인: 이미 있는 장르면 추가하지 않음
+                if (!state.likedGenres.includes(genre)) {
+                    newLiked = [...state.likedGenres, genre];
+                }
+            }
+
+            // Update vector: liked는 1, nope는 0 (기본값 유지)
             const newVector = [...state.preferenceVector];
             const index = GENRE_INDEX_MAP[genre];
-            if (index !== undefined) {
-                newVector[index] = liked ? 1 : -1;
+            if (index !== undefined && liked) {
+                newVector[index] = 1;  // liked만 1로 설정
             }
+            // nope의 경우 0 유지 (별도 처리 안 함)
 
             return {
                 likedGenres: newLiked,
-                dislikedGenres: newDisliked,
                 preferenceVector: newVector,
             };
         });
@@ -59,15 +64,12 @@ export const useOnboardingStore = create<OnboardingState>((set, get) => ({
 
     computeVector: () => {
         // Already computed in addSwipe, but keeping for interface compliance
-        const { likedGenres, dislikedGenres } = get();
+        const { likedGenres } = get();
         const vector = new Array(10).fill(0);
 
+        // liked된 장르만 1로 설정, nope는 0 유지
         likedGenres.forEach(g => {
             if (GENRE_INDEX_MAP[g] !== undefined) vector[GENRE_INDEX_MAP[g]] = 1;
-        });
-
-        dislikedGenres.forEach(g => {
-            if (GENRE_INDEX_MAP[g] !== undefined) vector[GENRE_INDEX_MAP[g]] = -1;
         });
 
         set({ preferenceVector: vector });
@@ -84,12 +86,16 @@ export const useOnboardingStore = create<OnboardingState>((set, get) => ({
         });
     },
 
+    setSkipped: (value) => {
+        set({ skipped: value });
+    },
+
     reset: () => {
         set({
             likedGenres: [],
-            dislikedGenres: [],
             preferenceVector: new Array(10).fill(0),
             ottList: [],
+            skipped: false,
         });
     }
 }));

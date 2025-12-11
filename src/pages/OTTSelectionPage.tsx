@@ -17,13 +17,14 @@ const OTT_PLATFORMS = [
 
 export default function OTTSelectionPage() {
     const navigate = useNavigate();
-    const { ottList, toggleOTT } = useOnboardingStore();
+    const { ottList, toggleOTT, setSkipped } = useOnboardingStore();
 
     const handleNext = () => {
         navigate("/onboarding/swipe");
     };
 
     const handleSkip = () => {
+        setSkipped(true);
         navigate("/onboarding/swipe");
     };
 

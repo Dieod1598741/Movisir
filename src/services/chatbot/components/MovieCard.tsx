@@ -32,19 +32,51 @@
 //    - truncate: 긴 텍스트 말줄임표 처리
 // ============================================================
 
-import { Eye } from 'lucide-react';
+import { Eye, RefreshCw } from 'lucide-react';
 import type { Movie } from '../../../api/movieApi.type';
+import { useState } from 'react';
+
 
 interface MovieCardProps {
     movie: Movie;
     onClick: () => void;
+    onReRecommend?: () => void;     // 재추천받기 콜백 (영화 제거 및 교체)
+    onAddToWatched?: () => void;    // 봤어요 리스트 추가 콜백
+    showReRecommend?: boolean;      // 재추천받기 버튼 표시 여부
 }
 
-export default function MovieCard({ movie, onClick }: MovieCardProps) {
+export default function MovieCard({ movie, onClick, onReRecommend, onAddToWatched, showReRecommend = false }: MovieCardProps) {
+    const [isRemoving, setIsRemoving] = useState(false);
+    const [isWatched, setIsWatched] = useState(movie.watched || false);  // 로컬 watched 상태
+
+    // 재추천받기 버튼 클릭 (포스터 사라짐)
+    const handleReRecommend = (e: React.MouseEvent) => {
+        e.stopPropagation();  // 카드 클릭 이벤트 방지
+
+        if (onReRecommend) {
+            setIsRemoving(true);
+            // 애니메이션 종료 후 실제 제거
+            setTimeout(() => {
+                onReRecommend();
+            }, 300);
+        }
+    };
+
+    // 봤어요 버튼 클릭 (포스터 안 사라짐)
+    const handleAddToWatched = (e: React.MouseEvent) => {
+        e.stopPropagation();  // 카드 클릭 이벤트 방지
+
+        if (onAddToWatched && !isWatched) {  // 이미 봤어요 표시된 경우 중복 클릭 방지
+            setIsWatched(true);  // 즉시 UI 업데이트
+            onAddToWatched();
+        }
+    };
+
     return (
         <div
             // 카드 컨테이너: group으로 묶어 자식 요소에 hover 효과 전파
-            className="relative group cursor-pointer rounded-lg overflow-hidden shadow-md hover:shadow-xl transition-all duration-300 hover:scale-105"
+            className={`relative group cursor-pointer rounded-lg overflow-hidden shadow-md hover:shadow-xl transition-all duration-300 hover:scale-105 ${isRemoving ? 'animate-slide-down-fade' : ''
+                }`}
             onClick={onClick}
         >
             {/* 포스터 이미지 */}
@@ -57,12 +89,27 @@ export default function MovieCard({ movie, onClick }: MovieCardProps) {
                 {/* 호버 시 어두운 오버레이 */}
                 <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors" />
 
-                {/* 시청 완료 뱃지 */}
-                {movie.watched && (
+                {/* 시청 완료 배지 */}
+                {isWatched && (
                     <div className="absolute top-2 left-2 bg-green-500/90 text-white text-xs px-2 py-1 rounded-full flex items-center gap-1 shadow-sm backdrop-blur-sm">
                         <Eye size={12} />
                         <span>Watched</span>
                     </div>
+                )}
+
+                {/* 봤어요 버튼 (우측 상단) - 시청 기록 추가만, 포스터 안 사라짐 */}
+                {showReRecommend && onAddToWatched && (
+                    <button
+                        onClick={handleAddToWatched}
+                        className={`absolute top-2 right-2 p-2 rounded-full shadow-md transition-all duration-300 backdrop-blur-sm ${isWatched
+                                ? 'bg-gray-400/90 text-white cursor-default'  // 이미 봤어요 표시: 회색
+                                : 'bg-green-500/90 text-white hover:bg-green-600 hover:scale-110'  // 아직 안 봄: 초록색
+                            }`}
+                        title={isWatched ? '이미 봤어요 리스트에 추가됨' : '봤어요 리스트에 추가'}
+                        disabled={isWatched}
+                    >
+                        <Eye size={16} />
+                    </button>
                 )}
             </div>
 
@@ -74,6 +121,17 @@ export default function MovieCard({ movie, onClick }: MovieCardProps) {
                 <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
                     {movie.genres.join(", ")}
                 </p>
+
+                {/* 재추천받기 버튼 - 포스터 사라짐 및 새 영화로 교체 */}
+                {showReRecommend && onReRecommend && (
+                    <button
+                        onClick={handleReRecommend}
+                        className="w-full mt-2 py-1.5 px-3 bg-blue-500 hover:bg-blue-600 text-white text-xs font-medium rounded-md flex items-center justify-center gap-1.5 transition-colors shadow-sm"
+                    >
+                        <RefreshCw size={12} />
+                        재추천받기
+                    </button>
+                )}
             </div>
         </div>
     );

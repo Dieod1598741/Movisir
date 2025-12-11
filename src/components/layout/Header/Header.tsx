@@ -4,7 +4,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import Button from "../../ui/Button";
-import Modal from "../../ui/Modal";
+import Modal from "../../Modal";
 import LoginModal from "../../../services/auth/components/LoginModal/LoginModal";
 import SignupModal from "../../../services/auth/components/SignupModal/SignupModal";
 import ForgotPasswordModal from "../../../services/auth/components/ForgotPasswordModal/ForgotPasswordModal";

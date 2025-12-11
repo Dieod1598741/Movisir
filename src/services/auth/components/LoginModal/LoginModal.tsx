@@ -1,6 +1,6 @@
 // [용도] 챗봇 기반 영화 추천 서비스 로그인 모달
 // [사용법] <LoginModal isOpen={isOpen} onClose={handleClose} onSignupClick={...} />
-// [주의사항] ESC 키 및 외부 클릭으로 닫힘
+// [주의사항] ESC 키로 닫힐, X 버튼으로만 닫기 가능힘
 
 import { useState, useEffect } from 'react';
 import { X } from 'lucide-react';
@@ -28,6 +28,7 @@ export default function LoginModal({ isOpen, onClose }: LoginModalProps) {
     const [touched, setTouched] = useState({ email: false, password: false });
     const [isLoading, setIsLoading] = useState(false);
     const [loginError, setLoginError] = useState('');
+    const [rememberMe, setRememberMe] = useState(true); // 기본값: 로그인 상태 유지
 
     // ESC 키로 모달 닫기
     useEffect(() => {
@@ -48,6 +49,7 @@ export default function LoginModal({ isOpen, onClose }: LoginModalProps) {
             setTouched({ email: false, password: false });
             setLoginError('');
             setIsLoading(false);
+            setRememberMe(true); // 기본값으로 리셋
         }
     }, [isOpen]);
 
@@ -83,7 +85,7 @@ export default function LoginModal({ isOpen, onClose }: LoginModalProps) {
         }));
     };
 
-    // ⭐ 로그인 실행 로직 (여기만 핵심적으로 변경됨)
+    // ⭐ 로그인 실행 로직 (rememberMe 파라미터 추가)
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setLoginError('');
@@ -97,11 +99,11 @@ export default function LoginModal({ isOpen, onClose }: LoginModalProps) {
 
         if (emailError || passwordError) return;
 
-        // 2) 로그인 실행
+        // 2) 로그인 실행 (rememberMe 상태 전달)
         setIsLoading(true);
         try {
             // 백엔드 API 호출 및 상태 업데이트 (AuthContext에서 처리)
-            await login(formData.email, formData.password);
+            await login(formData.email, formData.password, rememberMe);
 
             // 모달 닫기
             onClose();
@@ -115,23 +117,8 @@ export default function LoginModal({ isOpen, onClose }: LoginModalProps) {
             setIsLoading(false);
         }
     };
-
-    // 모달 외부 클릭 시 닫기
-    const handleBackdropClick = (e: React.MouseEvent<HTMLDivElement>) => {
-        if (e.target === e.currentTarget) {
-            onClose();
-        }
-    };
-
     if (!isOpen) return (
         <>
-            {/* 회원가입 모달은 LoginModal이 닫혀있어도 열릴 수 있어야 함 (전환 시) */}
-            {/* 하지만 현재 로직상 LoginModal 안에 있으므로, LoginModal이 닫히면 얘도 안보일 수 있음 */}
-            {/* -> 아니다, showSignupModal이 true일 때는 LoginModal 자체의 isOpen과 상관없이
-                   별도로 렌더링하거나, 부모 레벨에서 관리해야 함.
-                   하지만 간단히 하기 위해, 여기서 LoginModal 닫을 때 showSignupModal을 true로 하고
-                   return null 대신 SignupModal만 렌더링되게 할 수 있음.
-                */}
             {showSignupModal && (
                 <SignupModal
                     isOpen={showSignupModal}
@@ -142,10 +129,7 @@ export default function LoginModal({ isOpen, onClose }: LoginModalProps) {
     );
 
     return (
-        <div
-            className="fixed inset-0 bg-black/50 z-modal flex items-center justify-center p-4"
-            onClick={handleBackdropClick}
-        >
+        <div className="fixed inset-0 bg-black/50 z-modal flex items-center justify-center p-4">
             <div className="bg-white dark:bg-gray-800 w-[90%] md:w-full max-w-md rounded-xl shadow-2xl relative">
 
                 {/* 닫기 버튼 */}
@@ -234,6 +218,20 @@ export default function LoginModal({ isOpen, onClose }: LoginModalProps) {
                         {touched.password && errors.password && (
                             <p className="mt-1 text-sm text-red-500">{errors.password}</p>
                         )}
+                    </div>
+
+                    {/* 로그인 상태 유지 체크박스 */}
+                    <div className="flex items-center">
+                        <input
+                            id="rememberMe"
+                            type="checkbox"
+                            checked={rememberMe}
+                            onChange={(e) => setRememberMe(e.target.checked)}
+                            className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 focus:ring-2 dark:bg-gray-700 dark:border-gray-600"
+                        />
+                        <label htmlFor="rememberMe" className="ml-2 text-sm text-gray-700 dark:text-gray-300 cursor-pointer select-none">
+                            로그인 상태 유지
+                        </label>
                     </div>
 
                     {/* 로그인 버튼 */}

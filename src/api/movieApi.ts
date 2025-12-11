@@ -9,21 +9,130 @@ import type {
     Recommendation,
     RecommendationWithMovie,
     UserStats,
-    MovieRecommendationResult
+    MovieRecommendationResult,
+    BackendRecommendResponse,
+    BackendMovieRecommendation,
+    GenreMapping
 } from "./movieApi.type";
+
+// [상수] 장르 이름 ↔ 장르 ID 매핑 (백엔드 dummy_movies.json 기준)
+// 백엔드의 장르 ID와 정확히 일치해야 함
+const GENRE_NAME_TO_ID: GenreMapping = {
+    "액션": 1,
+    "모험": 2,
+    "애니메이션": 3,
+    "코미디": 4,
+    "범죄": 5,
+    "다큐멘터리": 6,
+    "드라마": 7,
+    "가족": 8,
+    "판타지": 9,
+    "역사": 10,
+    "공포": 11,
+    "음악": 12,
+    "미스터리": 13,
+    "로맨스": 14,
+    "SF": 15,
+    "스릴러": 16,
+    "전쟁": 17,
+    "서부": 18
+};
 
 // 전체 영화 목록 조회
 export const getMovies = async (): Promise<Movie[]> => {
-    const response = await axiosInstance.get<Movie[]>("/movies/{movie_Id}");
-    return response.data;
+    const response = await axiosInstance.get("/movies");
+
+    // 백엔드 응답을 프론트엔드 Movie 타입으로 변환
+    return response.data.map((movie: any) => ({
+        id: movie.movie_id,
+        title: movie.title,
+        genres: movie.genres,
+        year: movie.release_date ? new Date(movie.release_date).getFullYear() : undefined,
+        rating: movie.vote_average,
+        popularity: movie.popularity,
+        poster: movie.poster_url,
+        description: movie.overview,
+        popular: false,
+        watched: false
+    }));
 };
 
 // 특정 영화 조회
 export const getMovie = async (movieId: number): Promise<Movie> => {
-    const response = await axiosInstance.get<Movie>(`/movies/${movieId}`);
-    return response.data;
-};
+    const response = await axiosInstance.get(`/movies/${movieId}`);
+    const movie = response.data;
 
+    // 백엔드 응답을 프론트엔드 Movie 타입으로 변환
+    return {
+        id: movie.movie_id,
+        title: movie.title,
+        genres: movie.genres,
+        year: movie.release_date ? new Date(movie.release_date).getFullYear() : undefined,
+        rating: movie.vote_average,
+        popularity: movie.popularity,
+        poster: movie.poster_url,
+        description: movie.overview,
+        popular: false,
+        watched: false
+    };
+};
+// [용도] 백엔드 API를 통한 영화 추천
+// [사용법] const result = await postRecommendations({ time: "02:30", genres: ["SF", "드라마"], userId: 1, excludeAdult: true });
+export const postRecommendations = async (filters: {
+    time: string;      // "HH:MM" 형식
+    genres: string[];  // 장르 이름 배열 ["SF", "드라마"]
+    userId: number;
+    excludeAdult?: boolean;  // 성인 콘텐츠 제외 여부 (기본값: false)
+}): Promise<MovieRecommendationResult> => {
+    try {
+        // 1. 시간 변환: "02:30" -> 150분
+        const [hours, minutes] = filters.time.split(':').map(Number);
+        const runtime = hours * 60 + minutes;
+
+        // 2. 장르 변환: ["SF", "드라마"] -> [15, 7]
+        const genreIds = filters.genres
+            .map(genreName => GENRE_NAME_TO_ID[genreName])
+            .filter(id => id !== undefined);  // 매핑되지 않은 장르 제외
+
+        // 3. 백엔드 API 호출
+        const response = await axiosInstance.post<BackendRecommendResponse>("/chatbot/recommend", {
+            runtime,
+            genres: genreIds,
+            include_adult: !filters.excludeAdult  // excludeAdult의 반대로 전달
+        });
+
+        // 4. 백엔드 응답을 프론트엔드 Movie 타입으로 변환
+        const backendMovies = response.data.recommendations;
+
+        // Movie 타입으로 변환하는 헬퍼 함수
+        const convertToMovie = (backendMovie: BackendMovieRecommendation): Movie => ({
+            id: backendMovie.movie_id,
+            title: backendMovie.title,
+            genres: backendMovie.genres,
+            rating: backendMovie.vote_average,
+            poster: backendMovie.poster_url,
+            description: backendMovie.overview,
+            popular: false,  // 백엔드에서 구분하지 않으므로 기본값
+            watched: false   // 시청 여부는 별도로 관리
+        })
+
+        // 5. algorithmic과 popular로 분리
+        // 백엔드가 vote_average 기준으로 정렬해서 주므로:
+        // - 상위 3개: algorithmic (필터 기반 추천)
+        // - 그 다음 3개: popular (인기 영화)
+        const allMovies = backendMovies.map(convertToMovie);
+
+        console.log('전체 추천 영화 개수:', allMovies.length);
+
+        return {
+            algorithmic: allMovies.slice(0, 3),  // 상위 3개
+            popular: allMovies.slice(3, 6)       // 다음 3개
+        };
+    } catch (error) {
+        console.error("영화 추천 API 호출 중 오류:", error);
+        throw new Error("영화 추천을 가져오는 중 오류가 발생했습니다");
+    }
+};
 // 사용자별 영화 추천 (알고리즘 기반 3개 + 인기작 3개)
 export const getRecommendations = async (userId: number): Promise<MovieRecommendationResult> => {
     try {

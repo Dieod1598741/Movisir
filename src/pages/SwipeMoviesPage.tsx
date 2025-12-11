@@ -13,7 +13,7 @@ import type { OnboardingMovie } from "../api/onboardingApi.type";
 
 export default function SwipeMoviesPage() {
     const navigate = useNavigate();
-    const { addSwipe, computeVector } = useOnboardingStore();
+    const { addSwipe, computeVector, setSkipped } = useOnboardingStore();
 
     const [movies, setMovies] = useState<OnboardingMovie[]>([]);
     const [currentIndex, setCurrentIndex] = useState(0);
@@ -64,6 +64,11 @@ export default function SwipeMoviesPage() {
                 setSwipeDirection(null);
             }
         }, 300);
+    };
+
+    const handleSkipSurvey = () => {
+        setSkipped(true);
+        navigate("/onboarding/complete");
     };
 
     if (isLoading) {
@@ -196,6 +201,16 @@ export default function SwipeMoviesPage() {
                     aria-label="좋아요"
                 >
                     👍
+                </button>
+            </div>
+
+            {/* 건너뛰기 버튼 */}
+            <div className="mt-8">
+                <button
+                    onClick={handleSkipSurvey}
+                    className="text-gray-500 hover:text-white text-sm font-medium transition-colors px-4 py-2 hover:bg-gray-800 rounded-lg"
+                >
+                    취향 조사 건너뛰기
                 </button>
             </div>
         </div>

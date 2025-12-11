@@ -13,10 +13,11 @@ interface AuthContextType {
     user: Omit<User, 'password'> | null;
     isAuthenticated: boolean;
     isLoading: boolean;
-    login: (email: string, password: string) => Promise<void>;
+    login: (email: string, password: string, rememberMe?: boolean) => Promise<void>;
     signup: (email: string, password: string, name: string) => Promise<void>;
     logout: () => void;
     refreshUser: () => Promise<void>;
+    loadUserFromStorage: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -31,19 +32,23 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
     // 컴포넌트 마운트 시 localStorage에서 사용자 정보 복원
     useEffect(() => {
-        const savedUser = authApi.getCurrentUser();
-        if (savedUser) {
-            setUser(savedUser);
-        }
-        setIsLoading(false);
+        const loadUser = async () => {
+            const savedUser = await authApi.getCurrentUser();
+            if (savedUser) {
+                setUser(savedUser);
+            }
+            setIsLoading(false);
+        };
+
+        loadUser();
     }, []);
 
-    // 로그인
-    const login = async (email: string, password: string) => {
+    // 로그인 (rememberMe 추가)
+    const login = async (email: string, password: string, rememberMe: boolean = true) => {
         try {
-            const response = await authApi.login({ email, password });
+            const response = await authApi.login({ email, password }, rememberMe);
             setUser(response.user);
-            authApi.saveUser(response.user);
+            authApi.saveUser(response.user, rememberMe);
         } catch (error) {
             if (error instanceof Error) {
                 throw error;
@@ -87,6 +92,19 @@ export function AuthProvider({ children }: AuthProviderProps) {
         }
     };
 
+    // localStorage에서 사용자 정보 로드 (회원가입 직후 등)
+    const loadUserFromStorage = async () => {
+        try {
+            const savedUser = await authApi.getCurrentUser();
+            if (savedUser) {
+                setUser(savedUser);
+                console.log('localStorage에서 사용자 정보 로드 완료:', savedUser);
+            }
+        } catch (error) {
+            console.error('사용자 정보 로드 실패:', error);
+        }
+    };
+
     const value: AuthContextType = {
         user,
         isAuthenticated: !!user,
@@ -94,7 +112,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
         login,
         signup,
         logout,
-        refreshUser
+        refreshUser,
+        loadUserFromStorage
     };
 
     return (

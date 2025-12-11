@@ -25,6 +25,11 @@ self.addEventListener('install', (event) => {
 
 // 네트워크 요청 가로채기 (Network First 전략)
 self.addEventListener('fetch', (event) => {
+    // POST, PUT, DELETE 등의 요청은 캐시하지 않음 (GET만 캐시 가능)
+    if (event.request.method !== 'GET') {
+        return;
+    }
+
     event.respondWith(
         fetch(event.request)
             .then((response) => {

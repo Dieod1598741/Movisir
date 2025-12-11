@@ -1,28 +1,34 @@
 import { create } from 'zustand';
 import { type Movie } from '../api/movieApi.type';
-import { getMovies } from '../api/movieApi';
+import { getMovies, postRecommendations } from '../api/movieApi';
+
 
 interface Filters {
     time: string;
     genres: string[];
+    excludeAdult: boolean;  // 성인 콘텐츠 제외
 }
 
 interface MovieState {
     filters: Filters;
+    userId: number | null;  // 현재 로그인한 사용자 ID
     allMovies: Movie[];
-    recommendedMovies: Movie[];
+    recommendedMovies: Movie[];  // 현재 표시 중인 추천 영화 (최대 3개)
+    allRecommendedMovies: Movie[];  // 백엔드에서 받은 전체 추천 영화 목록
     popularMovies: Movie[];
     detailMovie: Movie | null;
     isLoading: boolean;
     error: string | null;
 
     // Actions
+    setUserId: (userId: number | null) => void;
     setTime: (time: string) => void;
     toggleGenre: (genre: string) => void;
+    toggleExcludeAdult: () => void;  // 성인 제외 토글
 
     loadMovies: () => Promise<void>;
-    loadRecommended: () => void;
-    loadPopular: () => void;
+    loadRecommended: () => Promise<void>;
+    removeRecommendedMovie: (movieId: number) => void;
 
     setDetailMovie: (movie: Movie | null) => void;
     resetFilters: () => void;
@@ -31,23 +37,39 @@ interface MovieState {
 export const useMovieStore = create<MovieState>((set, get) => ({
     filters: {
         time: "00:00",
-        genres: []
+        genres: [],
+        excludeAdult: false  // 기본값: 성인 콘텐츠 포함
     },
+    userId: null,
     allMovies: [],
     recommendedMovies: [],
+    allRecommendedMovies: [],  // 전체 추천 영화 목록
     popularMovies: [],
     detailMovie: null,
     isLoading: false,
     error: null,
 
+    setUserId: (userId) => set({ userId }),
+
     setTime: (time) => set((state) => ({ filters: { ...state.filters, time } })),
 
-    toggleGenre: (genre) => set((state) => {
-        const genres = state.filters.genres.includes(genre)
-            ? state.filters.genres.filter(g => g !== genre)
-            : [...state.filters.genres, genre];
-        return { filters: { ...state.filters, genres } };
-    }),
+    toggleGenre: (genre) =>
+        set((state) => ({
+            filters: {
+                ...state.filters,
+                genres: state.filters.genres.includes(genre)
+                    ? state.filters.genres.filter((g) => g !== genre)
+                    : [...state.filters.genres, genre]
+            }
+        })),
+
+    toggleExcludeAdult: () =>
+        set((state) => ({
+            filters: {
+                ...state.filters,
+                excludeAdult: !state.filters.excludeAdult
+            }
+        })),
 
     loadMovies: async () => {
         set({ isLoading: true, error: null });
@@ -60,39 +82,81 @@ export const useMovieStore = create<MovieState>((set, get) => ({
         }
     },
 
-    loadRecommended: () => {
-        const { filters, allMovies } = get();
-        // Simple filtering logic based on genres
-        let recommended = allMovies.filter(movie => {
-            // If genres selected, must match at least one
-            if (filters.genres.length > 0) {
-                const hasGenre = movie.genres.some((g: string) => filters.genres.includes(g));
-                if (!hasGenre) return false;
-            }
+    // [함수] 백엔드 API로 추천 영화 로드
+    loadRecommended: async () => {
+        const { filters, userId } = get();
 
-            return true;
-        });
+        console.log('=== loadRecommended 호출 ===');
+        console.log('userId:', userId);
+        console.log('filters:', filters);
 
-        // Shuffle and pick 3
-        recommended = recommended.sort(() => 0.5 - Math.random()).slice(0, 3);
-        set({ recommendedMovies: recommended });
+        // userId가 없으면 추천 불가
+        if (!userId) {
+            console.error("로그인이 필요합니다");
+            set({ error: "로그인이 필요합니다", isLoading: false });
+            return;
+        }
+
+        set({ isLoading: true, error: null });
+        try {
+            console.log('백엔드 API 호출 시작...');
+            // 백엔드 API 호출
+            const result = await postRecommendations({
+                time: filters.time,
+                genres: filters.genres,
+                userId,
+                excludeAdult: filters.excludeAdult
+            });
+
+            console.log('API 응답:', result);
+
+            // 전체 추천 영화 목록 저장 (재추천 시 사용)
+            set({
+                allRecommendedMovies: result.algorithmic,  // 전체 목록 저장
+                recommendedMovies: result.algorithmic.slice(0, 3),  // 처음 3개만 표시
+                popularMovies: result.popular,
+                isLoading: false
+            });
+            console.log('✅ 추천 영화 로드 완료');
+        } catch (error) {
+            console.error("영화 추천 로드 중 오류:", error);
+            set({ error: "영화 추천을 가져오는 중 오류가 발생했습니다", isLoading: false });
+        }
     },
 
-    loadPopular: () => {
-        const { allMovies } = get();
-        let popular = allMovies.filter(movie => movie.popular);
+    // [함수] 추천 영화 제거 및 자동 채우기
+    removeRecommendedMovie: (movieId) => set((state) => {
+        console.log('🔄 재추천: 제거할 영화 ID:', movieId);
 
-        // Shuffle and pick 3
-        popular = popular.sort(() => 0.5 - Math.random()).slice(0, 3);
-        set({ popularMovies: popular });
-    },
+        // 1. 현재 표시 중인 영화에서 제거
+        const newRecommended = state.recommendedMovies.filter(m => m.id !== movieId);
+
+        // 2. 이미 표시된 영화 ID 목록
+        const displayedIds = state.recommendedMovies.map(m => m.id);
+
+        // 3. 전체 목록에서 아직 표시되지 않은 영화 찾기
+        const nextMovie = state.allRecommendedMovies.find(
+            m => !displayedIds.includes(m.id) && m.id !== movieId
+        );
+
+        // 4. 다음 영화가 있으면 추가
+        if (nextMovie) {
+            console.log('✅ 다음 영화로 채움:', nextMovie.title);
+            newRecommended.push(nextMovie);
+        } else {
+            console.log('⚠️ 더 이상 추천할 영화가 없습니다');
+        }
+
+        return { recommendedMovies: newRecommended };
+    }),
 
     setDetailMovie: (movie) => set({ detailMovie: movie }),
 
     resetFilters: () => set({
         filters: {
             time: "00:00",
-            genres: []
+            genres: [],
+            excludeAdult: false
         }
     })
 }));

@@ -1,8 +1,15 @@
 import axios from "axios";
 
+// skipErrorRedirect 속성을 위한 타입 확장
+declare module 'axios' {
+    export interface AxiosRequestConfig {
+        skipErrorRedirect?: boolean;
+    }
+}
+
 const API_BASE_URL =
     process.env.NODE_ENV === "development"
-        ? "http://10.0.1.117"  // [변경 필요] 백엔드 도메인 서버로 변경필요
+        ? "http://localhost:8000"  // FastAPI 백엔드 서버
         : "https://api.movisr.com"; // [변경 필요] 실제 배포된 백엔드 서버 주소
 
 const axiosInstance = axios.create({
@@ -120,22 +127,26 @@ axiosInstance.interceptors.response.use(
         }
 
         // [New] Error Page Redirection
+        // skipErrorRedirect 플래그가 있는 요청은 에러 페이지로 리다이렉트하지 않음
+        const skipErrorRedirect = originalRequest?.skipErrorRedirect;
         const status = error.response?.status;
         const currentPath = window.location.pathname;
 
-        if (status === 400 && currentPath !== "/error/400") {
-            window.location.href = "/error/400";
-            return Promise.reject(error);
-        }
+        if (!skipErrorRedirect) {
+            if (status === 400 && currentPath !== "/error/400") {
+                window.location.href = "/error/400";
+                return Promise.reject(error);
+            }
 
-        if (status === 423 && currentPath !== "/error/423") {
-            window.location.href = "/error/423";
-            return Promise.reject(error);
-        }
+            if (status === 423 && currentPath !== "/error/423") {
+                window.location.href = "/error/423";
+                return Promise.reject(error);
+            }
 
-        if (status === 500 && currentPath !== "/error/500") {
-            window.location.href = "/error/500";
-            return Promise.reject(error);
+            if (status === 500 && currentPath !== "/error/500") {
+                window.location.href = "/error/500";
+                return Promise.reject(error);
+            }
         }
 
         return Promise.reject(error);

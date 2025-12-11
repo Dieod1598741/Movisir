@@ -8,8 +8,10 @@ import { useMovieStore } from '../../../store/useMovieStore';
 
 export default function ChatbotPanel({ isOpen, onClose }: ChatbotPanelProps) {
   const [messages, setMessages] = useState<Message[]>([]);
-  const { loadRecommended, loadPopular } = useMovieStore();
+  const [hasRecommended, setHasRecommended] = useState(false);  // 추천 완료 플래그
+  const { loadRecommended } = useMovieStore();
 
+  // 챗봇이 열릴 때 초기 메시지 표시
   useEffect(() => {
     if (isOpen && messages.length === 0) {
       // Initialize messages when panel opens for the first time
@@ -29,14 +31,35 @@ export default function ChatbotPanel({ isOpen, onClose }: ChatbotPanelProps) {
     }
   }, [isOpen]);
 
-  const handleApplyFilters = () => {
-    // Load recommendations
-    loadRecommended();
-    loadPopular();
+  // 챗봇이 닫힐 때 모든 상태 초기화
+  useEffect(() => {
+    if (!isOpen) {
+      setMessages([]);
+      setHasRecommended(false);
+      console.log('🔄 챗봇 닫힘 - 상태 초기화 완료');
+    }
+  }, [isOpen]);
 
-    // Append new messages
-    setMessages(prev => [
-      ...prev,
+  const handleApplyFilters = () => {
+    console.log('=== handleApplyFilters 호출 ===');
+
+    // 이미 추천했으면 무시 (중복 방지)
+    if (hasRecommended) {
+      console.log('⚠️ 이미 추천을 받았습니다. 다시 추천받으려면 챗봇을 닫고 다시 열어주세요.');
+      return;
+    }
+
+    // Load recommendations (popular 데이터는 loadRecommended에서 함께 로드됨)
+    loadRecommended();
+    setHasRecommended(true);
+
+    // 필터 메시지를 제거하고 결과만 표시 (첫 인사 메시지는 유지)
+    setMessages([
+      {
+        id: '1',
+        type: 'bot',
+        content: '영화 추천을 받으시려면 아래 필터를 선택하세요!'
+      },
       {
         id: Date.now().toString(),
         type: 'bot',
@@ -58,6 +81,11 @@ export default function ChatbotPanel({ isOpen, onClose }: ChatbotPanelProps) {
             </div>
           </div>
         )
+      },
+      {
+        id: (Date.now() + 2).toString(),
+        type: 'bot',
+        content: '💡 다시 추천받으려면 챗봇을 닫고 다시 열어주세요!'
       }
     ]);
   };
@@ -127,14 +155,50 @@ export default function ChatbotPanel({ isOpen, onClose }: ChatbotPanelProps) {
 
 // Helper components to subscribe to store changes within the chat bubble
 function RecommendedList() {
-  const { recommendedMovies, setDetailMovie } = useMovieStore();
+  const { recommendedMovies, setDetailMovie, removeRecommendedMovie, userId } = useMovieStore();
 
   if (recommendedMovies.length === 0) return <p className="text-xs text-gray-400 col-span-3">No matches found.</p>;
+
+  // localStorage에서 봤어요 목록 가져오기
+  const getWatchedMovies = (): number[] => {
+    if (!userId) return [];
+    const stored = localStorage.getItem(`watchedMovies_${userId}`);
+    return stored ? JSON.parse(stored) : [];
+  };
+
+  // localStorage에 봤어요 목록 저장하기
+  const saveWatchedMovie = (movieId: number) => {
+    if (!userId) return;
+    const watched = getWatchedMovies();
+    if (!watched.includes(movieId)) {
+      watched.push(movieId);
+      localStorage.setItem(`watchedMovies_${userId}`, JSON.stringify(watched));
+      console.log('✅ 봤어요 리스트에 추가:', movieId);
+    }
+  };
+
+  const handleAddToWatched = (movieId: number) => {
+    saveWatchedMovie(movieId);
+    // TODO: 추후 백엔드 API 호출로 교체
+    // await addWatchHistory(userId, movieId, 0);
+  };
+
+  const watchedMovieIds = getWatchedMovies();
 
   return (
     <>
       {recommendedMovies.map(movie => (
-        <MovieCard key={movie.id} movie={movie} onClick={() => setDetailMovie(movie)} />
+        <MovieCard
+          key={movie.id}
+          movie={{
+            ...movie,
+            watched: watchedMovieIds.includes(movie.id)  // localStorage 기반으로 watched 설정
+          }}
+          onClick={() => setDetailMovie(movie)}
+          onReRecommend={() => removeRecommendedMovie(movie.id)}
+          onAddToWatched={() => handleAddToWatched(movie.id)}
+          showReRecommend={true}
+        />
       ))}
     </>
   );
@@ -148,7 +212,12 @@ function PopularList() {
   return (
     <>
       {popularMovies.map(movie => (
-        <MovieCard key={movie.id} movie={movie} onClick={() => setDetailMovie(movie)} />
+        <MovieCard
+          key={movie.id}
+          movie={movie}
+          onClick={() => setDetailMovie(movie)}
+          showReRecommend={false}
+        />
       ))}
     </>
   );

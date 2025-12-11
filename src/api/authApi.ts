@@ -8,28 +8,48 @@ import type { SignupRequest, SignupResponse } from "./authApi.type";
 // ------------------------------
 // 🔐 로그인
 // ------------------------------
-export const login = async (data: LoginRequest): Promise<LoginResponse> => {
+export const login = async (data: LoginRequest, rememberMe: boolean = true): Promise<LoginResponse> => {
     try {
         const response = await axiosInstance.post("/auth/login", {
             email: data.email,
             password: data.password,
-        });
+        }, {
+            skipErrorRedirect: true,
+        } as any);
 
         const { accessToken, refreshToken, user } = response.data;
 
-        // 토큰 저장
-        localStorage.setItem("accessToken", accessToken);
-        localStorage.setItem("refreshToken", refreshToken);
-        localStorage.setItem("user", JSON.stringify(user));
+        // 토큰 저장 (rememberMe에 따라 localStorage 또는 sessionStorage)
+        const storage = rememberMe ? localStorage : sessionStorage;
+        storage.setItem("accessToken", accessToken);
+        storage.setItem("refreshToken", refreshToken);
+        storage.setItem("user", JSON.stringify(user));
+        // 로그인 방식 저장 (나중에 확인용)
+        storage.setItem("rememberMe", rememberMe ? "true" : "false");
 
         return {
             user,
             message: "로그인 성공",
         };
     } catch (error: any) {
-        const msg =
-            error?.response?.data?.message ||
-            "로그인 중 오류가 발생했습니다";
+        // 백엔드 에러 응답 구조: { detail: { error: "...", message: "..." } }
+        const errorData = error?.response?.data;
+        let msg = "로그인 중 오류가 발생했습니다";
+
+        if (errorData) {
+            // detail이 객체인 경우 (백엔드 FastAPI 표준)
+            if (typeof errorData.detail === 'object' && errorData.detail?.message) {
+                msg = errorData.detail.message;
+            }
+            // detail이 문자열인 경우
+            else if (typeof errorData.detail === 'string') {
+                msg = errorData.detail;
+            }
+            // message 필드가 있는 경우
+            else if (errorData.message) {
+                msg = errorData.message;
+            }
+        }
 
         throw new Error(msg);
     }
@@ -40,26 +60,42 @@ export const login = async (data: LoginRequest): Promise<LoginResponse> => {
 // ------------------------------
 export const signup = async (data: SignupRequest): Promise<SignupResponse> => {
     try {
-        // 백엔드(server.cjs)에 실제 요청
-        const response = await axiosInstance.post("/auth/signup/request", data);
+        // 백엔드에 실제 요청
+        // skipErrorRedirect: true로 설정하여 400 에러 시 에러 페이지로 리다이렉트되지 않도록 함
+        const response = await axiosInstance.post("/auth/signup", data, {
+            skipErrorRedirect: true,
+        } as any);
+
+        const { user, message } = response.data;
 
         return {
-            user: {
-                id: response.data.userId,
-                email: data.email,
-                name: data.name,
-                createdAt: new Date().toISOString(),
-                profile: {
-                    favoriteGenres: [],
-                    ottServices: []
-                }
-            },
-            message: "회원가입 요청 성공",
+            user,
+            message,
         };
     } catch (error: any) {
-        const msg =
-            error?.response?.data?.message ||
-            "회원가입 중 오류가 발생했습니다";
+        // 에러 메시지 우선순위: detail.message > message > detail (문자열) > 기본 메시지
+        let msg = "회원가입 중 오류가 발생했습니다";
+
+        if (error?.response?.data) {
+            const errorData = error.response.data;
+
+            // 중복 이메일 에러 처리 (일반적으로 400 에러)
+            if (error.response.status === 400) {
+                if (typeof errorData.detail === 'string' && errorData.detail.includes('already exists')) {
+                    msg = "이미 가입된 이메일입니다.";
+                } else if (typeof errorData.detail === 'string' && errorData.detail.includes('이미')) {
+                    msg = errorData.detail;
+                } else if (errorData.detail?.message) {
+                    msg = errorData.detail.message;
+                } else if (errorData.message) {
+                    msg = errorData.message;
+                } else if (typeof errorData.detail === 'string') {
+                    msg = errorData.detail;
+                }
+            } else {
+                msg = errorData.detail?.message || errorData.message || msg;
+            }
+        }
 
         throw new Error(msg);
     }
@@ -75,9 +111,16 @@ export const logout = async (): Promise<void> => {
         console.error("로그아웃 중 오류가 발생했습니다:", error);
     }
 
+    // localStorage와 sessionStorage 모두에서 제거
     localStorage.removeItem("accessToken");
     localStorage.removeItem("refreshToken");
     localStorage.removeItem("user");
+    localStorage.removeItem("rememberMe");
+
+    sessionStorage.removeItem("accessToken");
+    sessionStorage.removeItem("refreshToken");
+    sessionStorage.removeItem("user");
+    sessionStorage.removeItem("rememberMe");
 };
 
 // ------------------------------
@@ -85,32 +128,45 @@ export const logout = async (): Promise<void> => {
 // ------------------------------
 export const getCurrentUser = async () => {
     try {
-        // 1. 저장된 user 객체 확인 (우선순위 높음)
-        const userStr = localStorage.getItem("user");
-        if (userStr) {
-            const user = JSON.parse(userStr);
-            if (user && user.id) {
-                // Mock 서버인 경우 항상 최신 정보를 가져오기 위해 API 호출 시도
-                // (실제 앱에서는 로컬 정보만 써도 되지만, 여기서는 DB 동기화 확인용)
-                try {
-                    // [변경 필요] 실제 백엔드 API 경로로 변경하세요 (예: /users/me 또는 /auth/me)
-                    // 현재는 json-server 구조(users/{id})에 맞춰져 있습니다.
-                    const res = await axiosInstance.get(`http://localhost:3001/users/${user.id}`);
-                    return res.data;
-                } catch (e) {
-                    // API 호출 실패 시 로컬 정보라도 반환
+        // 1. localStorage 또는 sessionStorage에서 user 확인
+        let userStr = localStorage.getItem("user") || sessionStorage.getItem("user");
+        let storage: Storage | null = null;
+
+        if (localStorage.getItem("user")) {
+            storage = localStorage;
+        } else if (sessionStorage.getItem("user")) {
+            storage = sessionStorage;
+        }
+
+        if (userStr && storage) {
+            try {
+                const user = JSON.parse(userStr);
+                if (user && user.id) {
                     return user;
                 }
+            } catch (parseError) {
+                console.error("user 파싱 오류:", parseError);
+                storage?.removeItem("user");
             }
         }
 
-        // 2. 과거 방식 호환 (userId만 저장된 경우)
-        const userId = localStorage.getItem("userId");
-        if (!userId) return null;
+        // 2. accessToken 확인 (localStorage 또는 sessionStorage)
+        const accessToken = localStorage.getItem("accessToken") || sessionStorage.getItem("accessToken");
+        if (accessToken) {
+            const tokenStorage = localStorage.getItem("accessToken") ? localStorage : sessionStorage;
+            try {
+                const response = await axiosInstance.get("/auth/me");
+                const user = response.data;
+                tokenStorage.setItem("user", JSON.stringify(user));
+                return user;
+            } catch (error) {
+                console.error("사용자 정보 가져오기 실패:", error);
+            }
+        }
 
-        const res = await axiosInstance.get(`http://localhost:3001/users/${userId}`);
-        return res.data;
-    } catch {
+        return null;
+    } catch (error) {
+        console.error("getCurrentUser 오류:", error);
         return null;
     }
 };
@@ -189,10 +245,47 @@ export const verifyCode = async (email: string, code: string): Promise<{ valid: 
     }
 };
 
+export const checkEmailDuplicate = async (email: string): Promise<{
+    available: boolean;
+    message: string;
+}> => {
+    try {
+        const response = await axiosInstance.get(`/auth/check-email?email=${encodeURIComponent(email)}`);
+        return {
+            available: response.data.available,
+            message: response.data.message,
+        };
+    } catch (error: any) {
+        const msg = error?.response?.data?.message || '이메일 중복 확인 중 오류가 발생했습니다';
+        throw new Error(msg);
+    }
+};
+
+// ------------------------------
+// 👤 닉네임 중복 확인
+// ------------------------------
+export const checkNicknameDuplicate = async (nickname: string): Promise<{
+    available: boolean;
+    message: string;
+}> => {
+    try {
+        const response = await axiosInstance.get(`/auth/check-nickname?nickname=${encodeURIComponent(nickname)}`);
+        return {
+            available: response.data.available,
+            message: response.data.message,
+        };
+    } catch (error: any) {
+        const msg = error?.response?.data?.message || '닉네임 중복 확인 중 오류가 발생했습니다';
+        throw new Error(msg);
+    }
+};
+
 // ------------------------------
 // 💾 사용자 정보 저장 (로컬 스토리지 업데이트)
 // ------------------------------
-export const saveUser = (user: Omit<User, 'password'>): void => {
-    localStorage.setItem("user", JSON.stringify(user));
+export const saveUser = (user: Omit<User, 'password'>, rememberMe: boolean = true): void => {
+    const storage = rememberMe ? localStorage : sessionStorage;
+    storage.setItem("user", JSON.stringify(user));
+    storage.setItem("rememberMe", rememberMe ? "true" : "false");
 };
 

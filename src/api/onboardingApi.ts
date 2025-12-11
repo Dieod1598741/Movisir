@@ -39,11 +39,17 @@ export const verifyEmail = async (data: VerificationRequest): Promise<Verificati
 // ------------------------------
 export const fetchOnboardingMovies = async (limit: number = 10): Promise<OnboardingMovie[]> => {
     try {
-        const response = await axiosInstance.get<OnboardingMovie[]>(
+        const response = await axiosInstance.get(
             `/movies/onboarding?limit=${limit}`
         );
 
-        return response.data;
+        // 백엔드 MovieDetail 응답을 OnboardingMovie로 변환
+        return response.data.map((movie: any) => ({
+            id: movie.movie_id,
+            title: movie.title,
+            genres: movie.genres,
+            posterUrl: movie.poster_url
+        }));
     } catch (error: any) {
         const msg =
             error?.response?.data?.message ||
@@ -70,6 +76,26 @@ export const submitOnboarding = async (
         const msg =
             error?.response?.data?.message ||
             "온보딩 완료 중 오류가 발생했습니다";
+
+        throw new Error(msg);
+    }
+};
+
+// ------------------------------
+// 🚫 온보딩 건너뛰기
+// ------------------------------
+export const skipOnboarding = async (userId: number): Promise<OnboardingCompleteResponse> => {
+    try {
+        const response = await axiosInstance.post<OnboardingCompleteResponse>(
+            "/onboarding/skip",
+            { userId }
+        );
+
+        return response.data;
+    } catch (error: any) {
+        const msg =
+            error?.response?.data?.message ||
+            "온보딩 건너뛰기 중 오류가 발생했습니다";
 
         throw new Error(msg);
     }

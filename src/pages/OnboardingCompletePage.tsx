@@ -4,12 +4,14 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useOnboardingStore } from "../store/onboardingStore";
-import { submitOnboarding } from "../api/onboardingApi";
+import { submitOnboarding, skipOnboarding } from "../api/onboardingApi";
 import { getCurrentUser } from "../api/authApi";
+import { useAuth } from "../app/providers/AuthContext";
 
 export default function OnboardingCompletePage() {
     const navigate = useNavigate();
-    const { ottList, likedGenres, dislikedGenres, preferenceVector, reset } = useOnboardingStore();
+    const { loadUserFromStorage } = useAuth();
+    const { ottList, likedGenres, preferenceVector, skipped, reset } = useOnboardingStore();
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [error, setError] = useState("");
 
@@ -18,49 +20,70 @@ export default function OnboardingCompletePage() {
         setError("");
 
         try {
+            // 디버깅: localStorage 확인
+            console.log("=== 온보딩 완료 디버깅 ===");
+            console.log("localStorage user:", localStorage.getItem("user"));
+            console.log("localStorage accessToken:", localStorage.getItem("accessToken"));
+            console.log("skipped 상태:", skipped);
+
             // [현재 상태] authApi.ts에서 getCurrentUser가 비동기(async)로 변경되었으므로 await 필수
             const user = await getCurrentUser();
+            console.log("getCurrentUser 결과:", user);
 
             if (!user) {
-                throw new Error("사용자 정보를 찾을 수 없습니다");
+                throw new Error("사용자 정보를 찾을 수 없습니다. 다시 로그인해주세요.");
             }
 
-            // 1) 백엔드에 온보딩 데이터 전송 (db.json 업데이트)
-            const response = await submitOnboarding({
-                userId: user.id,
-                ott: ottList,
-                likedGenres,
-                dislikedGenres,
-                preferenceVector,
-            });
+            let response;
 
-            // -----------------------------------------------------------
-            // [백엔드 연동 가이드]
-            // 실제 운영 서버에서는 응답으로 최신 유저 정보를 받아와서
-            // 로컬 스토리지의 유저 정보를 갱신해야 합니다.
-            // 아래 코드는 현재 Mock Server(server.cjs) 기준입니다.
-            // -----------------------------------------------------------
+            // skipped 상태에 따라 다른 API 호출
+            if (skipped) {
+                console.log("온보딩 건너뛰기 API 호출");
+                response = await skipOnboarding(user.id);
+            } else {
+                // 중복 제거: 같은 장르가 여러 번 포함될 수 있으므로 Set으로 중복 제거
+                const uniqueLikedGenres = Array.from(new Set(likedGenres));
 
-            // 2) 최신 유저 정보 확인 (Mock 서버에서 user 객체를 반환하도록 수정됨)
-            const updatedUser = response.user; // server.cjs 수정으로 user 필드 추가됨
+                console.log("온보딩 데이터 전송:", {
+                    userId: user.id,
+                    ott: ottList,
+                    likedGenres: uniqueLikedGenres,
+                    originalCount: likedGenres.length,
+                    uniqueCount: uniqueLikedGenres.length,
+                    preferenceVector,
+                });
+
+                // 1) 백엔드에 온보딩 데이터 전송 (dislikedGenres 제거, 중복 제거된 장르 전송)
+                response = await submitOnboarding({
+                    userId: user.id,
+                    ott: ottList,
+                    likedGenres: uniqueLikedGenres,  // 중복 제거된 장르
+                    preferenceVector,
+                });
+            }
+
+            console.log("응답:", response);
+
+            // 2) 최신 유저 정보 확인
+            const updatedUser = response.user;
 
             if (updatedUser) {
                 // 3) 프론트 로컬 스토리지 업데이트
-                // (실제 백엔드: 응답받은 최신 유저 정보로 덮어쓰기)
                 localStorage.setItem("user", JSON.stringify(updatedUser));
+                console.log("localStorage 업데이트 완료");
 
-                // 필요하다면 userId도 갱신 (보통은 변하지 않음)
-                // localStorage.setItem("userId", updatedUser.id); 
+                // ✅ AuthContext의 user 상태도 업데이트하여 메인 페이지에서 로그인 상태 즉시 반영
+                await loadUserFromStorage();
             }
 
             // 4) 온보딩 스토어 초기화
             reset();
 
             // 5) 메인 페이지로 이동
-            navigate("/"); // '/main' 대신 '/' 루트 경로 사용 권장 (라우터 설정에 따라 다름)
+            navigate("/");
 
         } catch (err: any) {
-            console.error(err);
+            console.error("온보딩 완료 오류:", err);
             setError(err.message || "온보딩 완료 중 오류가 발생했습니다");
         } finally {
             setIsSubmitting(false);
@@ -111,31 +134,11 @@ export default function OnboardingCompletePage() {
                         </h2>
                         {likedGenres.length > 0 ? (
                             <div className="flex flex-wrap gap-2">
-                                {likedGenres.map((genre) => (
+                                {/* 중복 제거하여 표시 */}
+                                {Array.from(new Set(likedGenres)).map((genre) => (
                                     <span
                                         key={genre}
                                         className="px-4 py-2 bg-green-600/50 text-white rounded-lg"
-                                    >
-                                        {genre}
-                                    </span>
-                                ))}
-                            </div>
-                        ) : (
-                            <p className="text-gray-400">아직 선택한 장르가 없습니다</p>
-                        )}
-                    </div>
-
-                    {/* 싫어하는 장르 */}
-                    <div className="bg-gray-900/50 rounded-xl p-6">
-                        <h2 className="text-xl font-bold text-white mb-3 flex items-center gap-2">
-                            💔 싫어하는 장르
-                        </h2>
-                        {dislikedGenres.length > 0 ? (
-                            <div className="flex flex-wrap gap-2">
-                                {dislikedGenres.map((genre) => (
-                                    <span
-                                        key={genre}
-                                        className="px-4 py-2 bg-red-600/50 text-white rounded-lg"
                                     >
                                         {genre}
                                     </span>

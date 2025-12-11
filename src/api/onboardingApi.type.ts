@@ -28,7 +28,7 @@ export interface OnboardingMovie {
     title: string;
     genres: string[];
     posterUrl?: string;
-    popularity: number;
+    popularity?: number;
 }
 
 // ------------------------------
@@ -37,8 +37,7 @@ export interface OnboardingMovie {
 export interface OnboardingCompleteRequest {
     userId: number;
     ott: string[];
-    likedGenres: string[];
-    dislikedGenres: string[];
+    likedGenres: string[];  // 좋아하는 장르만 전송 (nope는 제외)
     preferenceVector: number[];
 }
 

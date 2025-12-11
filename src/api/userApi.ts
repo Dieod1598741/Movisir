@@ -33,3 +33,31 @@ export const patchUser = (id: User['id'], data: User['data']) => {
 export const deleteUser = (id: User['id']) => {
     return axiosInstance.delete(`/users/${id}`);
 };
+
+// ------------------------------
+// 온보딩 리마인더 관련 API
+// ------------------------------
+
+// 온보딩 리마인더 dismiss 상태 업데이트
+export const dismissOnboardingReminder = async (userId: number, dismissed: boolean) => {
+    try {
+        const response = await axiosInstance.post(`/users/${userId}/onboarding-reminder/dismiss`, {
+            dismissed
+        });
+        return response.data;
+    } catch (error: any) {
+        console.error('온보딩 리마인더 dismiss 업데이트 실패:', error);
+        throw error;
+    }
+};
+
+// 온보딩 리마인더 마지막 표시 시간 업데이트
+export const updateOnboardingReminderLastShown = async (userId: number) => {
+    try {
+        const response = await axiosInstance.post(`/users/${userId}/onboarding-reminder/update-last-shown`);
+        return response.data;
+    } catch (error: any) {
+        console.error('온보딩 리마인더 마지막 표시 시간 업데이트 실패:', error);
+        throw error;
+    }
+};

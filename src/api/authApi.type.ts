@@ -1,16 +1,19 @@
 // [용도] 인증 관련 API 타입 정의
 // [사용법] import { User, LoginRequest, SignupRequest } from "./authApi.type";
 
+export interface UserProfile {
+    favoriteGenres: string[];
+    ottServices: string[];
+    onboarding_completed_at?: string | null;  // 온보딩 완료 시간 (완료 여부 판단)
+}
+
 export interface User {
     id: number;
     email: string;
     password: string;
     name: string;
     createdAt: string;
-    profile: {
-        favoriteGenres: string[];
-        ottServices: string[];
-    };
+    profile: UserProfile;
 }
 
 export interface LoginRequest {
